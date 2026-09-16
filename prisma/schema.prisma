@@ -1,0 +1,44 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum LeadSource {
+  Instagram
+  WhatsApp
+  Facebook
+  Email
+}
+
+enum PipelineStage {
+  Inquiry
+  Engaged
+  Application
+  Enrolled
+  Unresponsive
+}
+
+model Lead {
+  id        String        @id @default(cuid())
+  name      String
+  email     String
+  phone     String
+  program   String
+  source    LeadSource    @default(Email)
+  stage     PipelineStage @default(Inquiry)
+  notes     Note[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+model Note {
+  id        String   @id @default(cuid())
+  text      String
+  createdAt DateTime @default(now())
+  leadId    String
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+}
