@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useLeads } from "@/app/context/LeadContext";
+import { PipelineStage } from "@prisma/client";
 import {
   BookOpen,
   Users,
@@ -208,16 +209,17 @@ export default function CoursesPage() {
       {/* Course Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-6">
         {filteredCourses.map((course) => {
+          // Safe null/undefined check for program and strong enum string comparison
           const enrolledCount = leads.filter(
             (l) =>
-              l.program.toLowerCase() === course.title.toLowerCase() &&
-              l.stage === "Enrolled"
+              (l.program ?? "").toLowerCase() === course.title.toLowerCase() &&
+              String(l.stage).toUpperCase() === "ENROLLED"
           ).length;
 
           const applicantCount = leads.filter(
             (l) =>
-              l.program.toLowerCase() === course.title.toLowerCase() &&
-              l.stage !== "Rejected"
+              (l.program ?? "").toLowerCase() === course.title.toLowerCase() &&
+              String(l.stage).toUpperCase() !== "REJECTED"
           ).length;
 
           const occupancyRate = Math.min(
@@ -457,7 +459,7 @@ export default function CoursesPage() {
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        status: e.target.value as any,
+                        status: e.target.value as "Active" | "Upcoming" | "Completed",
                       })
                     }
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"

@@ -1,11 +1,10 @@
 "use client";
 
-export { LeadSource } from "@prisma/client";
 import { useState } from "react";
-import { useLeads } from "@/app/context/LeadContext";
+import { useLeads, Lead, Note } from "@/app/context/LeadContext";
 import { 
   X, Mail, Phone, BookOpen, Tag, Calendar, 
-  MessageSquare, Clock, Send, Plus 
+  MessageSquare, Clock, Plus, Send 
 } from "lucide-react";
 
 interface LeadDetailDrawerProps {
@@ -16,20 +15,20 @@ interface LeadDetailDrawerProps {
 export default function LeadDetailDrawer({ leadId, onClose }: LeadDetailDrawerProps) {
   const { leads, addNote } = useLeads();
   const [activeTab, setActiveTab] = useState<"overview" | "notes">("overview");
-  const [noteText, setNoteText] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [noteText, setNoteText] = useState<string>("");
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   
-  const lead = leads.find((l) => l.id === leadId);
+  const lead = leads.find((l: Lead) => l.id === leadId);
 
   if (!leadId || !lead) return null;
 
-  const formatDate = (dateVal: any) => {
+  const formatDate = (dateVal?: string | Date | null) => {
     if (!dateVal) return "N/A";
     const dateObj = new Date(dateVal);
-    return isNaN(dateObj.getTime()) ? "N/A" : dateObj.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
+    return isNaN(dateObj.getTime()) ? "N/A" : dateObj.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric"
     });
   };
 
@@ -38,14 +37,16 @@ export default function LeadDetailDrawer({ leadId, onClose }: LeadDetailDrawerPr
     if (!noteText.trim() || isSubmitting) return;
 
     setIsSubmitting(true);
-    await addNote(lead.id, noteText);
+    if (addNote) {
+      await addNote(lead.id, noteText);
+    }
     setNoteText("");
     setIsSubmitting(false);
   };
 
   const initials = lead.name
     .split(" ")
-    .map((n) => n[0])
+    .map((n: string) => n[0])
     .join("")
     .toUpperCase()
     .slice(0, 2);
@@ -57,13 +58,13 @@ export default function LeadDetailDrawer({ leadId, onClose }: LeadDetailDrawerPr
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg bg-white h-full shadow-2xl flex flex-col border-l border-slate-100 transition-all duration-300"
+        className="w-full max-w-lg bg-white h-full shadow-2xl flex flex-col border-l border-slate-100 transition-all duration-300 animate-in slide-in-from-right"
       >
         {/* Header Profile Banner */}
         <div className="p-6 bg-slate-900 text-white relative">
           <button
             onClick={onClose}
-            className="absolute top-5 right-5 p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors"
+            className="absolute top-5 right-5 p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -79,9 +80,11 @@ export default function LeadDetailDrawer({ leadId, onClose }: LeadDetailDrawerPr
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                   {lead.stage}
                 </span>
-                <span className="text-xs text-slate-400 flex items-center gap-1">
-                  <Tag className="w-3 h-3" /> {lead.source}
-                </span>
+                {lead.source && (
+                  <span className="text-xs text-slate-400 flex items-center gap-1">
+                    <Tag className="w-3 h-3" /> {lead.source}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -98,7 +101,7 @@ export default function LeadDetailDrawer({ leadId, onClose }: LeadDetailDrawerPr
             )}
             {lead.phone && (
               <a
-                href={`https://wa.me/${lead.phone.replace(/[^0-9]/g, '')}`}
+                href={`https://wa.me/${lead.phone.replace(/[^0-9]/g, "")}`}
                 target="_blank"
                 rel="noreferrer"
                 className="flex items-center justify-center gap-2 py-2 px-3 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium rounded-lg transition-colors"
@@ -113,17 +116,16 @@ export default function LeadDetailDrawer({ leadId, onClose }: LeadDetailDrawerPr
         <div className="flex border-b border-slate-100 bg-slate-50 px-6">
           <button
             onClick={() => setActiveTab("overview")}
-            className={`py-3 px-4 text-xs font-semibold border-b-2 transition-colors ${
+            className={`py-3 px-4 text-xs font-semibold border-b-2 transition-colors cursor-pointer ${
               activeTab === "overview"
                 ? "border-emerald-500 text-emerald-600"
                 : "border-transparent text-slate-500 hover:text-slate-800"
             }`}
           >
-            Lead Overview
-          </button>
+<span className="font-medium text-slate-800">{lead.email || "N/A"}</span>          </button>
           <button
             onClick={() => setActiveTab("notes")}
-            className={`py-3 px-4 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 ${
+            className={`py-3 px-4 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer ${
               activeTab === "notes"
                 ? "border-emerald-500 text-emerald-600"
                 : "border-transparent text-slate-500 hover:text-slate-800"
@@ -180,7 +182,9 @@ export default function LeadDetailDrawer({ leadId, onClose }: LeadDetailDrawerPr
                   <span className="text-slate-500 flex items-center gap-2">
                     <Tag className="w-4 h-4 text-slate-400" /> Source Channel
                   </span>
-                  <span className="font-medium text-slate-800">{lead.source}</span>
+                  <span className="font-medium text-slate-800">
+                    {lead.source || "Direct / Manual"}
+                  </span>
                 </div>
 
                 <div className="flex items-center justify-between text-sm py-1">
@@ -205,7 +209,7 @@ export default function LeadDetailDrawer({ leadId, onClose }: LeadDetailDrawerPr
                   <button
                     type="submit"
                     disabled={isSubmitting || !noteText.trim()}
-                    className="flex items-center gap-1.5 py-1.5 px-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors shadow-sm"
+                    className="flex items-center gap-1.5 py-1.5 px-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors shadow-sm cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" /> Save Note
                   </button>
@@ -215,7 +219,7 @@ export default function LeadDetailDrawer({ leadId, onClose }: LeadDetailDrawerPr
               {/* Notes List */}
               <div className="space-y-3 pt-2">
                 {lead.notes && lead.notes.length > 0 ? (
-                  lead.notes.map((note) => (
+                  lead.notes.map((note: Note) => (
                     <div key={note.id} className="p-4 bg-slate-50 border border-slate-100 rounded-xl">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
@@ -246,7 +250,7 @@ export default function LeadDetailDrawer({ leadId, onClose }: LeadDetailDrawerPr
           <span className="text-[11px] text-slate-400 font-mono">ID: {lead.id.slice(0, 12)}...</span>
           <button
             onClick={onClose}
-            className="py-2 px-5 bg-slate-900 hover:bg-slate-800 text-white font-medium text-xs rounded-lg transition-colors shadow-sm"
+            className="py-2 px-5 bg-slate-900 hover:bg-slate-800 text-white font-medium text-xs rounded-lg transition-colors shadow-sm cursor-pointer"
           >
             Close Panel
           </button>

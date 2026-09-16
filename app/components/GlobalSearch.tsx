@@ -1,19 +1,20 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { useLeads } from "@/app/context/LeadContext";
+import { useLeads, Lead } from "@/app/context/LeadContext";
 import { Search, User, BookOpen, Layers, X, ArrowRight } from "lucide-react";
 
 export default function GlobalSearch() {
   const router = useRouter();
-  const { leads } = useLeads();
-  const [isOpen, setIsOpen] = useState(false);
-  const [query, setQuery] = useState("");
+  const context = useLeads();
+  const leads = useMemo(() => context?.leads ?? [], [context?.leads]);
 
-  // Keyboard shortcut listener (Cmd+K / Ctrl+K)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
+  const [isOpen, setIsOpen] = useState<boolean>(false);
+  const [query, setQuery] = useState<string>("");
+
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setIsOpen((prev) => !prev);
@@ -21,19 +22,28 @@ export default function GlobalSearch() {
       if (e.key === "Escape" && isOpen) {
         setIsOpen(false);
       }
-    };
+    },
+    [isOpen]
+  );
+
+  useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen]);
+  }, [handleKeyDown]);
 
-  const filteredLeads = query.trim()
-    ? leads.filter(
-        (l) =>
-          l.name.toLowerCase().includes(query.toLowerCase()) ||
-          l.phone.includes(query) ||
-          l.program.toLowerCase().includes(query.toLowerCase())
-      )
-    : [];
+  const filteredLeads: Lead[] = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+
+    return leads.filter((l: Lead) => {
+      const matchesName = l.name?.toLowerCase().includes(q) ?? false;
+      const matchesPhone = l.phone ? l.phone.includes(q) : false;
+      const matchesProgram = l.program?.toLowerCase().includes(q) ?? false;
+      const matchesEmail = l.email?.toLowerCase().includes(q) ?? false;
+
+      return matchesName || matchesPhone || matchesProgram || matchesEmail;
+    });
+  }, [leads, query]);
 
   const handleSelectLead = (id: string) => {
     setIsOpen(false);
@@ -49,9 +59,9 @@ export default function GlobalSearch() {
 
   return (
     <div className="relative">
-      {/* Trigger Input Bar - Dark Theme Styled */}
       <button
         onClick={() => setIsOpen(true)}
+        type="button"
         className="flex items-center justify-between w-64 md:w-80 px-3.5 py-2 text-xs bg-slate-900/60 hover:bg-slate-900/90 border border-slate-700/80 rounded-xl text-slate-400 hover:text-slate-200 transition-all cursor-pointer shadow-2xs"
       >
         <span className="flex items-center gap-2">
@@ -63,11 +73,13 @@ export default function GlobalSearch() {
         </kbd>
       </button>
 
-      {/* Command Palette Modal */}
       {isOpen && (
-        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-50 flex items-start justify-center pt-20 p-4">
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-50 flex items-start justify-center pt-20 p-4"
+        >
           <div className="bg-white w-full max-w-xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden space-y-0 animate-in fade-in zoom-in-95 duration-150">
-            {/* Modal Search Input Header */}
             <div className="relative border-b border-slate-100 flex items-center px-4">
               <Search className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
               <input
@@ -79,14 +91,15 @@ export default function GlobalSearch() {
                 className="w-full py-3.5 text-xs font-medium text-slate-800 placeholder-slate-400 bg-transparent focus:outline-none"
               />
               <button
+                type="button"
                 onClick={() => setIsOpen(false)}
+                aria-label="Close search"
                 className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Modal Body Results */}
             <div className="max-h-80 overflow-y-auto p-2 text-xs space-y-1">
               {!query.trim() && (
                 <div className="space-y-1">
@@ -94,6 +107,7 @@ export default function GlobalSearch() {
                     Quick Navigation
                   </p>
                   <button
+                    type="button"
                     onClick={() => handleNavigate("/leads")}
                     className="w-full flex items-center justify-between px-3 py-2 text-slate-700 hover:bg-slate-50 rounded-xl transition-colors text-left cursor-pointer"
                   >
@@ -104,6 +118,7 @@ export default function GlobalSearch() {
                   </button>
 
                   <button
+                    type="button"
                     onClick={() => handleNavigate("/pipeline")}
                     className="w-full flex items-center justify-between px-3 py-2 text-slate-700 hover:bg-slate-50 rounded-xl transition-colors text-left cursor-pointer"
                   >
@@ -114,6 +129,7 @@ export default function GlobalSearch() {
                   </button>
 
                   <button
+                    type="button"
                     onClick={() => handleNavigate("/courses")}
                     className="w-full flex items-center justify-between px-3 py-2 text-slate-700 hover:bg-slate-50 rounded-xl transition-colors text-left cursor-pointer"
                   >
@@ -130,22 +146,23 @@ export default function GlobalSearch() {
                   <p className="px-3 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-wider">
                     Matching Leads ({filteredLeads.length})
                   </p>
-                  {filteredLeads.map((lead) => (
+                  {filteredLeads.map((lead: Lead) => (
                     <button
                       key={lead.id}
+                      type="button"
                       onClick={() => handleSelectLead(lead.id)}
                       className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-emerald-50/60 rounded-xl transition-colors text-left cursor-pointer group"
                     >
                       <div className="flex items-center gap-2.5">
                         <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-600 text-xs">
-                          {lead.name.charAt(0)}
+                          {lead.name ? lead.name.charAt(0).toUpperCase() : "L"}
                         </div>
                         <div>
                           <p className="font-bold text-slate-900 group-hover:text-emerald-700">
                             {lead.name}
                           </p>
                           <p className="text-[11px] text-slate-400 font-medium">
-                            {lead.phone} • {lead.program}
+                            {lead.phone || "No phone"} • {lead.program || "Unassigned"}
                           </p>
                         </div>
                       </div>
@@ -164,7 +181,6 @@ export default function GlobalSearch() {
               )}
             </div>
 
-            {/* Modal Footer */}
             <div className="px-4 py-2 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
               <span>
                 Press <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-slate-600 font-mono text-[10px]">ESC</kbd> to exit

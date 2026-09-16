@@ -1,83 +1,117 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
-import { getLeads, updateLeadStageAction, createLeadAction } from "@/app/actions/leads";
-import { PipelineStage } from "@prisma/client";
+import React, { createContext, useContext, useState, useEffect } from "react";
 
-export type { PipelineStage };
+export type PipelineStage =
+  | "Inquiry"
+  | "Application Submitted"
+  | "Document Review"
+  | "Interview Scheduled"
+  | "Enrolled"
+  | "Rejected";
 
-export type LeadSource = "Instagram" | "WhatsApp" | "Email" | "Other" | string;
+export type LeadSource = "Instagram" | "WhatsApp" | "Facebook" | "Email";
+
+export interface Note {
+  id: string;
+  text: string;
+  createdAt: string;
+}
 
 export interface Lead {
   id: string;
   name: string;
-  email: string;
-  phone?: string | null;
-  program?: string | null;
-  source: LeadSource;
-  stage: PipelineStage;
-  createdAt?: string | Date;
-  updatedAt?: string | Date;
-  notes?: any[];
+  email?: string;
+  phone?: string;
+  program?: string;
+  source?: LeadSource | string;
+  stage: PipelineStage | string;
+  date?: string;
+  createdAt?: string;
+  notes?: Note[];
 }
 
 interface LeadContextType {
   leads: Lead[];
-  addLead: (leadData: Omit<Lead, "id" | "createdAt" | "updatedAt">) => Promise<void>;
-  updateLeadStage: (id: string, newStage: PipelineStage) => Promise<void>;
-  refreshLeads: () => Promise<void>;
+  addLead: (lead: Omit<Lead, "id">) => void;
+  updateLead: (id: string, updatedFields: Partial<Lead>) => void;
+  deleteLead: (id: string) => void;
+  addNote: (leadId: string, noteText: string) => void;
 }
 
-export const LeadContext = createContext<LeadContextType | null>(null);
+const LeadContext = createContext<LeadContextType | undefined>(undefined);
 
 export function LeadProvider({ children }: { children: React.ReactNode }) {
   const [leads, setLeads] = useState<Lead[]>([]);
 
-  const fetchLeads = async () => {
-    try {
-      const data = await getLeads();
-      setLeads(data as unknown as Lead[]);
-    } catch (error) {
-      console.error("Failed to fetch leads from database:", error);
-    }
-  };
-
   useEffect(() => {
-    fetchLeads();
+    const saved = localStorage.getItem("bizpilot_leads");
+    if (saved) {
+      try {
+        setLeads(JSON.parse(saved));
+      } catch (e) {
+        console.error("Failed to parse saved leads", e);
+      }
+    }
   }, []);
 
-  const addLead = async (leadData: any) => {
-    try {
-      await createLeadAction(leadData);
-      await fetchLeads();
-    } catch (error) {
-      console.error("Failed to add lead to database:", error);
-    }
+  useEffect(() => {
+    localStorage.setItem("bizpilot_leads", JSON.stringify(leads));
+  }, [leads]);
+
+  const addLead = (leadData: Omit<Lead, "id">) => {
+    const now = new Date().toISOString().split("T")[0];
+    const newLead: Lead = {
+      ...leadData,
+      id: `lead_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      date: leadData.date || now,
+      createdAt: leadData.createdAt || now,
+    };
+    setLeads((prev) => [newLead, ...prev]);
   };
 
-  const updateLeadStage = async (id: string, newStage: PipelineStage) => {
+  const updateLead = (id: string, updatedFields: Partial<Lead>) => {
     setLeads((prev) =>
-      prev.map((l) => (l.id === id ? { ...l, stage: newStage } : l))
+      prev.map((lead) => (lead.id === id ? { ...lead, ...updatedFields } : lead))
     );
-    try {
-      await updateLeadStageAction(id, newStage);
-    } catch (error) {
-      console.error("Failed to update stage in database:", error);
-      await fetchLeads();
-    }
+  };
+
+  const deleteLead = (id: string) => {
+    setLeads((prev) => prev.filter((lead) => lead.id !== id));
+  };
+
+  const addNote = (leadId: string, noteText: string) => {
+    if (!noteText.trim()) return;
+    const newNote: Note = {
+      id: `note_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      text: noteText.trim(),
+      createdAt: new Date().toISOString().split("T")[0],
+    };
+
+    setLeads((prev) =>
+      prev.map((lead) => {
+        if (lead.id === leadId) {
+          return {
+            ...lead,
+            notes: [...(lead.notes || []), newNote],
+          };
+        }
+        return lead;
+      })
+    );
   };
 
   return (
-    <LeadContext.Provider value={{ leads, addLead, updateLeadStage, refreshLeads: fetchLeads }}>
+    <LeadContext.Provider value={{ leads, addLead, updateLead, deleteLead, addNote }}>
       {children}
     </LeadContext.Provider>
   );
 }
 
-export const useLeads = () => {
+export function useLeads() {
   const context = useContext(LeadContext);
   if (!context) {
     throw new Error("useLeads must be used within a LeadProvider");
   }
   return context;
-};
+}

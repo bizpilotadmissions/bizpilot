@@ -19,7 +19,7 @@ const STAGES: string[] = [
 
 const SOURCES = ["All", "Instagram", "WhatsApp", "Facebook", "Email"];
 
-const getSourceBadge = (source: string) => {
+const getSourceBadge = (source: string | undefined) => {
   const cleanSource = source?.toLowerCase() || "";
 
   if (cleanSource.includes("instagram")) {
@@ -58,7 +58,12 @@ const getSourceBadge = (source: string) => {
 };
 
 export default function PipelinePage() {
-  const { leads, updateLeadStage } = useLeads();
+  const context = useLeads() as any;
+  const leads: Lead[] = context?.leads || [];
+  const setLeads = context?.setLeads;
+  const updateLeadStage = context?.updateLeadStage;
+  const updateLead = context?.updateLead;
+
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [selectedSource, setSelectedSource] = useState("All");
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -75,7 +80,15 @@ export default function PipelinePage() {
     e.preventDefault();
     const leadId = e.dataTransfer.getData("text/plain");
     if (leadId) {
-      updateLeadStage(leadId, targetStage);
+      if (typeof updateLeadStage === "function") {
+        updateLeadStage(leadId, targetStage);
+      } else if (typeof updateLead === "function") {
+        updateLead(leadId, { stage: targetStage });
+      } else if (typeof setLeads === "function") {
+        setLeads((prev: Lead[]) =>
+          prev.map((l) => (l.id === leadId ? { ...l, stage: targetStage } : l))
+        );
+      }
     }
   };
 

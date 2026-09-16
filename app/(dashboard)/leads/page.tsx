@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useLeads, PipelineStage, LeadSource } from "@/app/context/LeadContext";
 import LeadDetailDrawer from "@/app/components/LeadDetailDrawer";
 import TabNav from "@/app/components/TabNav";
@@ -25,7 +25,6 @@ import {
   Zap,
 } from "lucide-react";
 
-// Inline SVG Brand Icons
 const InstagramIcon = ({ className = "w-3 h-3" }: { className?: string }) => (
   <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
     <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
@@ -40,14 +39,54 @@ const FacebookIcon = ({ className = "w-3 h-3" }: { className?: string }) => (
   </svg>
 );
 
-const INITIAL_LEAD_STATE = {
+interface NewLeadState {
+  name: string;
+  email: string;
+  phone: string;
+  program: string;
+  source: LeadSource;
+  notes: string;
+}
+
+const INITIAL_LEAD_STATE: NewLeadState = {
   name: "",
   email: "",
   phone: "",
   program: "Social Media Management",
-  source: "Instagram" as LeadSource,
+  source: "Instagram",
   notes: "",
 };
+
+const STAGES: PipelineStage[] = [
+  "Inquiry",
+  "Application Submitted",
+  "Document Review",
+  "Interview Scheduled",
+  "Enrolled",
+  "Rejected",
+];
+
+const SOURCES: LeadSource[] = ["Instagram", "WhatsApp", "Facebook", "Email"];
+
+function parseCSVLine(text: string): string[] {
+  const result: string[] = [];
+  let cur = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '"') {
+      inQuotes = !inQuotes;
+    } else if (c === "," && !inQuotes) {
+      result.push(cur.trim().replace(/^"|"$/g, ""));
+      cur = "";
+    } else {
+      cur += c;
+    }
+  }
+  result.push(cur.trim().replace(/^"|"$/g, ""));
+  return result;
+}
 
 export default function LeadsPage() {
   const context = useLeads();
@@ -63,21 +102,30 @@ export default function LeadsPage() {
   const [activeTab, setActiveTab] = useState("all");
   const [isMounted, setIsMounted] = useState(false);
 
-  // Bulk Messaging Broadcast State
   const [isBroadcastOpen, setIsBroadcastOpen] = useState(false);
   const [broadcastMessage, setBroadcastMessage] = useState("");
   const [isSendingBroadcast, setIsSendingBroadcast] = useState(false);
   const [broadcastSent, setBroadcastSent] = useState(false);
 
-  // Add Lead Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [newLead, setNewLead] = useState(INITIAL_LEAD_STATE);
+  const [newLead, setNewLead] = useState<NewLeadState>(INITIAL_LEAD_STATE);
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
-  // --- Analytics & KPI Calculations ---
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === "Escape") {
+      setIsBroadcastOpen(false);
+      setIsAddModalOpen(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleKeyDown]);
+
   const totalLeadsCount = leads.length;
   const enrolledCount = useMemo(() => leads.filter((l) => l.stage === "Enrolled").length, [leads]);
   const activeInquiriesCount = useMemo(() => leads.filter((l) => l.stage === "Inquiry").length, [leads]);
@@ -109,7 +157,7 @@ export default function LeadsPage() {
         phone: newLead.phone,
         program: newLead.program,
         source: newLead.source,
-        stage: "Inquiry" as PipelineStage,
+        stage: "Inquiry",
         notes: newLead.notes
           ? [
               {
@@ -135,14 +183,15 @@ export default function LeadsPage() {
       const content = event.target?.result as string;
       if (!content) return;
 
-      const lines = content.split("\n");
-      const headers = lines[0].split(",").map((h) => h.trim().toLowerCase().replace(/['"]/g, ""));
+      const lines = content.split(/\r?\n/);
+      if (lines.length < 2) return;
 
+      const headers = parseCSVLine(lines[0]).map((h) => h.toLowerCase());
       let importedCount = 0;
 
       for (let i = 1; i < lines.length; i++) {
         if (!lines[i].trim()) continue;
-        const currentline = lines[i].split(",").map((cell) => cell.trim().replace(/['"]/g, ""));
+        const currentline = parseCSVLine(lines[i]);
 
         const leadObj: Record<string, string> = {};
         headers.forEach((header, index) => {
@@ -150,15 +199,18 @@ export default function LeadsPage() {
         });
 
         if (leadObj.name || leadObj.email || leadObj.phone) {
+          const rawSource = leadObj.source || "Email";
+          const matchedSource = (SOURCES.find(
+            (s) => s.toLowerCase() === rawSource.toLowerCase()
+          ) || "Email") as LeadSource;
+
           addLead({
             name: leadObj.name || "Imported Lead",
             email: leadObj.email || "no-email@imported.com",
             phone: leadObj.phone || "+92 000 0000000",
             program: leadObj.program || "General Enquiry",
-            source: (["Instagram", "WhatsApp", "Facebook", "Email"].includes(leadObj.source) 
-              ? leadObj.source 
-              : "Email") as LeadSource,
-            stage: "Inquiry" as PipelineStage,
+            source: matchedSource,
+            stage: "Inquiry",
             notes: [],
           });
           importedCount++;
@@ -172,24 +224,14 @@ export default function LeadsPage() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const STAGES: PipelineStage[] = [
-    "Inquiry",
-    "Application Submitted",
-    "Document Review",
-    "Interview Scheduled",
-    "Enrolled",
-    "Rejected",
-  ];
-
-  const SOURCES: LeadSource[] = ["Instagram", "WhatsApp", "Facebook", "Email"];
-
   const filteredLeads = useMemo(() => {
+    const query = searchQuery.toLowerCase();
     return leads.filter((lead) => {
+      const phoneStr = lead.phone || "";
       const matchesSearch =
-        lead.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        lead.program.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        lead.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        lead.phone.includes(searchQuery);
+        lead.name.toLowerCase().includes(query) ||
+        (lead.program?.toLowerCase() || "").includes(query) ||
+        phoneStr.includes(query);
 
       const matchesStage =
         selectedStageFilter === "All Stages" || lead.stage === selectedStageFilter;
@@ -198,15 +240,10 @@ export default function LeadsPage() {
         selectedSourceFilter === "All Channels" || lead.source === selectedSourceFilter;
 
       const matchesTab =
-        activeTab === "all"
-          ? true
-          : activeTab === "inquiries"
-          ? lead.stage === "Inquiry"
-          : activeTab === "enrolled"
-          ? lead.stage === "Enrolled"
-          : activeTab === "rejected"
-          ? lead.stage === "Rejected"
-          : true;
+        activeTab === "all" ? true :
+        activeTab === "inquiries" ? lead.stage === "Inquiry" :
+        activeTab === "enrolled" ? lead.stage === "Enrolled" :
+        activeTab === "rejected" ? lead.stage === "Rejected" : true;
 
       return matchesSearch && matchesStage && matchesSource && matchesTab;
     });
@@ -220,8 +257,8 @@ export default function LeadsPage() {
 
     try {
       const recipients = filteredLeads.map((lead) => ({
-        phone: lead.phone,
-        email: lead.email,
+        phone: lead.phone || "",
+        email: lead.email || "",
         channel: lead.source,
       }));
 
@@ -242,7 +279,7 @@ export default function LeadsPage() {
           setBroadcastMessage("");
         }, 1800);
       } else {
-        alert("Failed to send broadcast. Check your server logs.");
+        alert("Failed to send broadcast. Check server logs.");
       }
     } catch (error) {
       console.error("[Broadcast Request Error]", error);
@@ -255,7 +292,7 @@ export default function LeadsPage() {
   const handleExportCSV = () => {
     const headers = ["ID,Name,Email,Phone,Program,Source,Stage,Date\n"];
     const rows = filteredLeads.map(
-      (l) => `${l.id},"${l.name}",${l.email},${l.phone},"${l.program}",${l.source},${l.stage},${l.date}`
+      (l) => `${l.id},"${l.name}",${l.email || ""},${l.phone || ""},"${l.program || ""}",${l.source},${l.stage},${l.date || ""}`
     );
     const blob = new Blob([headers.concat(rows.join("\n")).join("")], {
       type: "text/csv;charset=utf-8;",
@@ -271,24 +308,9 @@ export default function LeadsPage() {
 
   const tabs = [
     { id: "all", label: "All Leads", count: leads.length, icon: Users },
-    {
-      id: "inquiries",
-      label: "Inquiries",
-      count: activeInquiriesCount,
-      icon: Clock,
-    },
-    {
-      id: "enrolled",
-      label: "Converted",
-      count: enrolledCount,
-      icon: CheckCircle2,
-    },
-    {
-      id: "rejected",
-      label: "Lost",
-      count: leads.filter((l) => l.stage === "Rejected").length,
-      icon: Archive,
-    },
+    { id: "inquiries", label: "Inquiries", count: activeInquiriesCount, icon: Clock },
+    { id: "enrolled", label: "Converted", count: enrolledCount, icon: CheckCircle2 },
+    { id: "rejected", label: "Lost", count: leads.filter((l) => l.stage === "Rejected").length, icon: Archive },
   ];
 
   const SourceBadge = ({ source }: { source: LeadSource }) => {
@@ -339,7 +361,7 @@ export default function LeadsPage() {
         className="hidden"
       />
 
-      {/* Page Header */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
@@ -376,7 +398,7 @@ export default function LeadsPage() {
         </div>
       </div>
 
-      {/* KPI Metrics Dashboard Bar */}
+      {/* KPI Dashboard */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-2xl border border-slate-200 p-5 flex items-center justify-between shadow-xs">
           <div className="space-y-1">
@@ -433,9 +455,8 @@ export default function LeadsPage() {
 
       <TabNav tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 
-      {/* Main Table Container */}
+      {/* Main Table */}
       <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-sm">
-        {/* Toolbar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <p className="text-xs font-semibold text-slate-500">
             Showing <span className="text-slate-900 font-bold">{filteredLeads.length}</span> leads
@@ -460,9 +481,7 @@ export default function LeadsPage() {
             >
               <option value="All Channels">All Channels</option>
               {SOURCES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
+                <option key={s} value={s}>{s}</option>
               ))}
             </select>
 
@@ -473,9 +492,7 @@ export default function LeadsPage() {
             >
               <option value="All Stages">All Stages</option>
               {STAGES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
+                <option key={s} value={s}>{s}</option>
               ))}
             </select>
 
@@ -490,7 +507,6 @@ export default function LeadsPage() {
           </div>
         </div>
 
-        {/* Table */}
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -515,12 +531,13 @@ export default function LeadsPage() {
                     {lead.name}
                   </td>
                   <td className="py-4 px-2">
-                    <SourceBadge source={lead.source || "Instagram"} />
+<SourceBadge source={(lead.source || "Email") as LeadSource} />                  </td>
+                  <td className="py-4 px-2 text-slate-700 font-medium">
+                    {lead.program ? String(lead.program) : "Unassigned"}
                   </td>
-                  <td className="py-4 px-2 text-slate-700 font-medium">{lead.program}</td>
                   <td className="py-4 px-2">
-                    <p className="text-slate-900 font-semibold">{lead.phone}</p>
-                    <p className="text-[10px] text-slate-500">{lead.email}</p>
+                    <p className="text-slate-900 font-semibold">{lead.phone || "—"}</p>
+                    <p className="text-[10px] text-slate-500">{lead.email || "—"}</p>
                   </td>
                   <td className="py-4 px-2">
                     <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-800 border border-slate-200">
@@ -557,7 +574,11 @@ export default function LeadsPage() {
 
       {/* Broadcast Modal */}
       {isBroadcastOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+        <div 
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4"
+        >
           <div className="bg-white w-full max-w-lg rounded-2xl border border-slate-200 shadow-xl p-6 space-y-5 text-slate-900">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <div className="flex items-center gap-2">
@@ -639,7 +660,11 @@ export default function LeadsPage() {
 
       {/* Manual Add Lead Modal */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+        <div 
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-50 p-4"
+        >
           <div className="bg-white w-full max-w-md rounded-2xl border border-slate-200 shadow-xl p-6 space-y-5 text-slate-900">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <h2 className="text-lg font-bold text-slate-900">Add New Lead</h2>
@@ -713,10 +738,9 @@ export default function LeadsPage() {
                     }
                     className="w-full px-3 py-2 text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                   >
-                    <option value="Instagram">Instagram</option>
-                    <option value="WhatsApp">WhatsApp</option>
-                    <option value="Facebook">Facebook</option>
-                    <option value="Email">Email</option>
+                    {SOURCES.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -752,7 +776,6 @@ export default function LeadsPage() {
         </div>
       )}
 
-      {/* Lead Detail Drawer */}
       <LeadDetailDrawer leadId={selectedLeadId} onClose={() => setSelectedLeadId(null)} />
     </div>
   );
