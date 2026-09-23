@@ -23,6 +23,7 @@ import {
   TrendingUp,
   Target,
   Zap,
+  Trash2,
 } from "lucide-react";
 
 const InstagramIcon = ({ className = "w-3 h-3" }: { className?: string }) => (
@@ -92,6 +93,7 @@ export default function LeadsPage() {
   const context = useLeads();
   const leads = context?.leads ?? [];
   const addLead = context?.addLead;
+  const deleteLead = context?.deleteLead;
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -172,6 +174,15 @@ export default function LeadsPage() {
 
     setNewLead(INITIAL_LEAD_STATE);
     setIsAddModalOpen(false);
+  };
+
+  const handleDeleteLead = (e: React.MouseEvent, id: string, name: string) => {
+    e.stopPropagation();
+    if (confirm(`Are you sure you want to delete lead "${name}"?`)) {
+      if (deleteLead) {
+        deleteLead(id);
+      }
+    }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -361,7 +372,6 @@ export default function LeadsPage() {
         className="hidden"
       />
 
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
@@ -398,7 +408,6 @@ export default function LeadsPage() {
         </div>
       </div>
 
-      {/* KPI Dashboard */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-2xl border border-slate-200 p-5 flex items-center justify-between shadow-xs">
           <div className="space-y-1">
@@ -455,7 +464,6 @@ export default function LeadsPage() {
 
       <TabNav tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 
-      {/* Main Table */}
       <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <p className="text-xs font-semibold text-slate-500">
@@ -531,7 +539,8 @@ export default function LeadsPage() {
                     {lead.name}
                   </td>
                   <td className="py-4 px-2">
-<SourceBadge source={(lead.source || "Email") as LeadSource} />                  </td>
+                    <SourceBadge source={(lead.source || "Email") as LeadSource} />
+                  </td>
                   <td className="py-4 px-2 text-slate-700 font-medium">
                     {lead.program ? String(lead.program) : "Unassigned"}
                   </td>
@@ -546,16 +555,26 @@ export default function LeadsPage() {
                   </td>
                   <td className="py-4 px-2 text-slate-600 font-medium">{lead.date}</td>
                   <td className="py-4 px-2 text-right">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedLeadId(lead.id);
-                      }}
-                      aria-label={`Open details for ${lead.name}`}
-                      className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600 cursor-pointer"
-                    >
-                      <MoreVertical className="w-4 h-4 text-slate-500" />
-                    </button>
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        onClick={(e) => handleDeleteLead(e, lead.id, lead.name)}
+                        aria-label={`Delete ${lead.name}`}
+                        className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-colors cursor-pointer"
+                        title="Delete Lead"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedLeadId(lead.id);
+                        }}
+                        aria-label={`Open details for ${lead.name}`}
+                        className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        <MoreVertical className="w-4 h-4 text-slate-500" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -572,7 +591,6 @@ export default function LeadsPage() {
         </div>
       </div>
 
-      {/* Broadcast Modal */}
       {isBroadcastOpen && (
         <div 
           role="dialog"
@@ -658,7 +676,6 @@ export default function LeadsPage() {
         </div>
       )}
 
-      {/* Manual Add Lead Modal */}
       {isAddModalOpen && (
         <div 
           role="dialog"
@@ -776,7 +793,10 @@ export default function LeadsPage() {
         </div>
       )}
 
-      <LeadDetailDrawer leadId={selectedLeadId} onClose={() => setSelectedLeadId(null)} />
+      <LeadDetailDrawer
+        leadId={selectedLeadId}
+        onClose={() => setSelectedLeadId(null)}
+      />
     </div>
   );
 }

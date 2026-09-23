@@ -42,3 +42,13 @@ model Note {
   leadId    String
   lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
 }
+model Lead {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  phone     String?
+  stage     String?  @default("Inquiry")
+  course    String?  // Add this field
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
